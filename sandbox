@@ -27,7 +27,7 @@ set -euo pipefail
 # Configuration
 SANDBOX_LABEL="ai.sandbox=true"
 SANDBOX_DATA_VOLUME_PREFIX="sandbox-data"
-DEFAULT_IMAGE="ubuntu:24.04"
+BASE_IMAGE="ubuntu:24.04"
 
 # Colors for output
 RED='\033[0;31m'
@@ -36,14 +36,16 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Agent configurations
-declare -A AGENT_IMAGES=(
-    ["claude"]="docker/sandbox-templates:claude-code"
-    ["opencode"]="ghcr.io/anomalyco/opencode:latest"
-    ["aider"]="paulgauthier/aider"
-    ["default"]="ubuntu:24.04"
+# Agent install commands (run once, cached in persistent volume)
+# These install to /root/.local/bin which is added to PATH
+declare -A AGENT_INSTALL_SCRIPTS=(
+    ["claude"]='curl -fsSL https://claude.ai/install.sh | sh'
+    ["opencode"]='curl -fsSL https://opencode.ai/install | bash'
+    ["aider"]='pip install --user aider-chat'
+    ["default"]=''
 )
 
+# Agent binary names
 declare -A AGENT_COMMANDS=(
     ["claude"]="claude"
     ["opencode"]="opencode"
@@ -209,23 +211,27 @@ cmd_run() {
     # Resolve workspace to absolute path
     workspace=$(cd "$workspace" && pwd)
     
-    # Determine image
+    # Determine image (use custom template or base image)
     local image
     if [[ -n "$template" ]]; then
         image="$template"
-    elif [[ -v AGENT_IMAGES[$agent] ]]; then
-        image="${AGENT_IMAGES[$agent]}"
     else
-        image="${AGENT_IMAGES[default]}"
-        log_warn "Unknown agent '$agent', using default image: $image"
+        image="$BASE_IMAGE"
     fi
     
-    # Determine command
-    local cmd
+    # Determine command and install script
+    local cmd install_script
     if [[ -v AGENT_COMMANDS[$agent] ]]; then
         cmd="${AGENT_COMMANDS[$agent]}"
     else
         cmd="${AGENT_COMMANDS[default]}"
+    fi
+    
+    if [[ -v AGENT_INSTALL_SCRIPTS[$agent] ]]; then
+        install_script="${AGENT_INSTALL_SCRIPTS[$agent]}"
+    else
+        install_script=""
+        log_warn "Unknown agent '$agent', no install script defined"
     fi
     
     # Check for existing sandbox
@@ -344,13 +350,14 @@ cmd_run() {
         run_args+=(-v "$vol")
     done
     
-    # Create persistent data volume for agent credentials
+    # Create persistent data volume for agent install cache and credentials
     local data_volume="${SANDBOX_DATA_VOLUME_PREFIX}-${agent}"
     if ! docker volume inspect "$data_volume" >/dev/null 2>&1; then
         log_info "Creating data volume: $data_volume"
         docker volume create "$data_volume" >/dev/null
     fi
-    run_args+=(-v "$data_volume:/root/.sandbox-data")
+    # Mount to /root/.local so installed binaries persist across container recreations
+    run_args+=(-v "$data_volume:/root/.local")
     
     # Network access
     run_args+=(--network host)
@@ -371,16 +378,49 @@ cmd_run() {
         default_args="${AGENT_DEFAULT_ARGS[$agent]}"
     fi
     
-    # Use shell wrapper to ensure workdir exists and cd into it
-    # This matches Docker Desktop sandbox behavior: workspace mounted at same path
-    local shell_wrapper="mkdir -p '$workspace' && cd '$workspace' && exec $cmd $default_args"
+    # Build the startup script that:
+    # 1. Installs dependencies if needed (curl, git, etc.)
+    # 2. Installs the agent if not already installed (cached in persistent volume)
+    # 3. Changes to workspace directory
+    # 4. Runs the agent
+    local startup_script
+    read -r -d '' startup_script << 'STARTUP_HEADER' || true
+#!/bin/bash
+set -e
+export PATH="/root/.local/bin:$PATH"
+export DEBIAN_FRONTEND=noninteractive
+
+# Install basic dependencies if missing
+if ! command -v curl &>/dev/null || ! command -v git &>/dev/null; then
+    echo "[sandbox] Installing dependencies..."
+    apt-get update -qq && apt-get install -y -qq curl git ca-certificates >/dev/null 2>&1
+fi
+STARTUP_HEADER
+
+    # Add agent-specific install
+    if [[ -n "$install_script" ]]; then
+        startup_script+="
+# Install agent if not already installed
+if ! command -v $cmd &>/dev/null; then
+    echo \"[sandbox] Installing $agent...\"
+    $install_script
+fi
+"
+    fi
+    
+    # Add workspace setup and exec
+    startup_script+="
+# Change to workspace and run agent
+mkdir -p '$workspace'
+cd '$workspace'
+exec $cmd $default_args"
     
     # Append any additional arguments from user
     for arg in "$@"; do
-        shell_wrapper="$shell_wrapper '$arg'"
+        startup_script+=" '$arg'"
     done
     
-    docker run "${run_args[@]}" "$image" /bin/sh -c "$shell_wrapper"
+    docker run "${run_args[@]}" "$image" /bin/bash -c "$startup_script"
 }
 
 cmd_ls() {
@@ -545,9 +585,9 @@ EXAMPLES:
     sandbox run --force-recreate claude
 
 SUPPORTED AGENTS:
-    claude      Claude Code (docker/sandbox-templates:claude-code)
-    opencode    OpenCode (ghcr.io/opencode-ai/opencode:latest)
-    aider       Aider (paulgauthier/aider)
+    claude      Claude Code (installed via claude.ai/install.sh)
+    opencode    OpenCode (installed via opencode.ai/install)
+    aider       Aider (installed via pip)
 
 Run 'sandbox <command> --help' for more information on a command.
 EOF

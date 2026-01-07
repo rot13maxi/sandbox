@@ -4,12 +4,13 @@ A shell script that replicates Docker Desktop's sandbox functionality for plain 
 
 ## Features
 
+- **Single base image**: All agents use Ubuntu 24.04, installed on-demand and cached
 - **One container per workspace**: Automatically reuses existing sandboxes for the same workspace/agent
 - **Workspace mounting**: Your project directory is mounted at the same path inside the container
 - **Config mounting**: Agent configs (`~/.claude`, `~/.anthropic`, etc.) automatically mounted
 - **Git integration**: Git user name/email injected for proper commit attribution
 - **SSH keys**: `~/.ssh` mounted read-only for git operations
-- **Persistent state**: Agent credentials stored in Docker volumes
+- **Persistent installs**: Agent binaries cached in Docker volumes for fast restarts
 - **Docker socket**: Optional Docker socket access for agents that need it
 - **Custom templates**: Use your own container images
 
@@ -79,11 +80,13 @@ sandbox logs <id>       # View container logs
 
 ## Supported Agents
 
-| Agent    | Image                                    |
-|----------|------------------------------------------|
-| claude   | docker/sandbox-templates:claude-code     |
-| opencode | ghcr.io/anomalyco/opencode:latest        |
-| aider    | paulgauthier/aider                       |
+All agents use the same Ubuntu 24.04 base image and are installed on first run. Binaries are cached in a persistent Docker volume for fast subsequent starts.
+
+| Agent    | Install Method                          |
+|----------|-----------------------------------------|
+| claude   | `curl -fsSL https://claude.ai/install.sh \| sh` |
+| opencode | `curl -fsSL https://opencode.ai/install \| bash` |
+| aider    | `pip install --user aider-chat`         |
 
 ## Examples
 
