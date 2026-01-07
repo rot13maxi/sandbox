@@ -39,7 +39,7 @@ NC='\033[0m' # No Color
 # Agent configurations
 declare -A AGENT_IMAGES=(
     ["claude"]="docker/sandbox-templates:claude-code"
-    ["opencode"]="ghcr.io/opencode-ai/opencode:latest"
+    ["opencode"]="ghcr.io/anomalyco/opencode:latest"
     ["aider"]="paulgauthier/aider"
     ["default"]="ubuntu:24.04"
 )

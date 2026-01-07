@@ -82,7 +82,7 @@ sandbox logs <id>       # View container logs
 | Agent    | Image                                    |
 |----------|------------------------------------------|
 | claude   | docker/sandbox-templates:claude-code     |
-| opencode | ghcr.io/opencode-ai/opencode:latest      |
+| opencode | ghcr.io/anomalyco/opencode:latest        |
 | aider    | paulgauthier/aider                       |
 
 ## Examples
