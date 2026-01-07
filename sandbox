@@ -350,14 +350,15 @@ cmd_run() {
         run_args+=(-v "$vol")
     done
     
-    # Create persistent data volume for agent install cache and credentials
+    # Create persistent volume for agent installs and home directory state
+    # This caches installed binaries and agent-specific data across container recreations
     local data_volume="${SANDBOX_DATA_VOLUME_PREFIX}-${agent}"
     if ! docker volume inspect "$data_volume" >/dev/null 2>&1; then
         log_info "Creating data volume: $data_volume"
         docker volume create "$data_volume" >/dev/null
     fi
-    # Mount to /root/.local so installed binaries persist across container recreations
-    run_args+=(-v "$data_volume:/root/.local")
+    # Mount as /root/.sandbox-persist, then symlink agent install dirs to it
+    run_args+=(-v "$data_volume:/root/.sandbox-persist")
     
     # Network access
     run_args+=(--network host)
@@ -387,7 +388,22 @@ cmd_run() {
     read -r -d '' startup_script << 'STARTUP_HEADER' || true
 #!/bin/bash
 set -e
-export PATH="/root/.local/bin:$PATH"
+
+# Set up persistent storage for agent installs
+# Each agent dir is stored in the persistent volume and symlinked
+PERSIST_DIR="/root/.sandbox-persist"
+mkdir -p "$PERSIST_DIR"/{local,opencode,claude}
+
+# Symlink agent install directories to persistent storage
+for dir in .local .opencode .claude; do
+    target="$PERSIST_DIR/${dir#.}"
+    if [[ ! -e "/root/$dir" ]]; then
+        ln -sf "$target" "/root/$dir"
+    fi
+done
+
+# Add common agent install paths
+export PATH="/root/.local/bin:/root/.opencode/bin:/root/.claude/bin:$PATH"
 export DEBIAN_FRONTEND=noninteractive
 
 # Install basic dependencies if missing
