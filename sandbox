@@ -27,7 +27,7 @@ set -euo pipefail
 # Configuration
 SANDBOX_LABEL="ai.sandbox=true"
 SANDBOX_DATA_VOLUME_PREFIX="sandbox-data"
-DEFAULT_IMAGE="ubuntu:22.04"
+DEFAULT_IMAGE="ubuntu:24.04"
 
 # Colors for output
 RED='\033[0;31m'
@@ -41,7 +41,7 @@ declare -A AGENT_IMAGES=(
     ["claude"]="docker/sandbox-templates:claude-code"
     ["opencode"]="ghcr.io/opencode-ai/opencode:latest"
     ["aider"]="paulgauthier/aider"
-    ["default"]="ubuntu:22.04"
+    ["default"]="ubuntu:24.04"
 )
 
 declare -A AGENT_COMMANDS=(
