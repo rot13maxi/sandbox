@@ -51,6 +51,14 @@ declare -A AGENT_COMMANDS=(
     ["default"]="/bin/bash"
 )
 
+# Default arguments for each agent (use . for current directory where needed)
+declare -A AGENT_DEFAULT_ARGS=(
+    ["claude"]=""
+    ["opencode"]="."
+    ["aider"]=""
+    ["default"]=""
+)
+
 # Home directory config paths to mount (read-only by default)
 HOME_CONFIG_PATHS=(
     ".claude"
@@ -357,11 +365,17 @@ cmd_run() {
         docker pull "$image"
     fi
     
+    # Get default arguments for this agent
+    local default_args=""
+    if [[ -v AGENT_DEFAULT_ARGS[$agent] ]]; then
+        default_args="${AGENT_DEFAULT_ARGS[$agent]}"
+    fi
+    
     # Use shell wrapper to ensure workdir exists and cd into it
     # This matches Docker Desktop sandbox behavior: workspace mounted at same path
-    local shell_wrapper="mkdir -p '$workspace' && cd '$workspace' && exec $cmd"
+    local shell_wrapper="mkdir -p '$workspace' && cd '$workspace' && exec $cmd $default_args"
     
-    # Append any additional arguments
+    # Append any additional arguments from user
     for arg in "$@"; do
         shell_wrapper="$shell_wrapper '$arg'"
     done
