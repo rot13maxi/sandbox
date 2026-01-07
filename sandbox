@@ -271,9 +271,8 @@ cmd_run() {
         run_args+=(-d)
     fi
     
-    # Mount workspace at same path  
+    # Mount workspace at same path
     run_args+=(-v "$workspace:$workspace")
-    run_args+=(-w /root)
     
     # Mount home directory configs
     local home_dir="$HOME"
@@ -358,8 +357,16 @@ cmd_run() {
         docker pull "$image"
     fi
     
-    # Run with workspace as argument (most agents accept a path argument)
-    docker run "${run_args[@]}" "$image" "$cmd" "$workspace" "$@"
+    # Use shell wrapper to ensure workdir exists and cd into it
+    # This matches Docker Desktop sandbox behavior: workspace mounted at same path
+    local shell_wrapper="mkdir -p '$workspace' && cd '$workspace' && exec $cmd"
+    
+    # Append any additional arguments
+    for arg in "$@"; do
+        shell_wrapper="$shell_wrapper '$arg'"
+    done
+    
+    docker run "${run_args[@]}" "$image" /bin/sh -c "$shell_wrapper"
 }
 
 cmd_ls() {
