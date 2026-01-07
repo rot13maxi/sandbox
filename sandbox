@@ -271,9 +271,9 @@ cmd_run() {
         run_args+=(-d)
     fi
     
-    # Mount workspace at same path
+    # Mount workspace at same path  
     run_args+=(-v "$workspace:$workspace")
-    run_args+=(-w "$workspace")
+    run_args+=(-w /root)
     
     # Mount home directory configs
     local home_dir="$HOME"
@@ -358,7 +358,8 @@ cmd_run() {
         docker pull "$image"
     fi
     
-    docker run "${run_args[@]}" "$image" "$cmd" "$@"
+    # Run with workspace as argument (most agents accept a path argument)
+    docker run "${run_args[@]}" "$image" "$cmd" "$workspace" "$@"
 }
 
 cmd_ls() {
